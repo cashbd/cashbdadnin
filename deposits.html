@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Deposits - CASHBD Admin</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+</head>
+<body>
+    <div class="sidebar">
+        <h2>CASHBD Admin</h2>
+        <a href="dashboard.html" class="nav-link"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+        <a href="deposits.html" class="nav-link active"><i class="fas fa-wallet"></i> Deposits</a>
+        <a href="withdrawals.html" class="nav-link"><i class="fas fa-hand-holding-usd"></i> Withdrawals</a>
+        <a href="users.html" class="nav-link"><i class="fas fa-users"></i> Users</a>
+        <a href="settings.html" class="nav-link"><i class="fas fa-cogs"></i> Settings</a>
+        <a href="plans.html" class="nav-link"><i class="fas fa-rocket"></i> Plans</a>
+    </div>
+
+    <div class="main">
+        <div class="header">
+            <h1>Manage Deposits</h1>
+        </div>
+
+        <div class="stat-card" style="padding: 0; overflow: hidden;">
+            <div style="overflow-x: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>User ID</th>
+                            <th>Sender Number</th> <!-- NEW COLUMN -->
+                            <th>Amount</th>
+                            <th>TrxID</th>
+                            <th>Method</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="depTableBody">
+                        <tr><td colspan="7" style="text-align:center; padding:20px;">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="firebase.js"></script>
+    <script src="admin.js"></script>
+    <script>
+        const tb = document.getElementById('depTableBody');
+        
+        // Fetch All Deposits
+        db.ref('deposits').on('value', snap => {
+            tb.innerHTML = '';
+            
+            if (!snap.exists()) {
+                tb.innerHTML = '<tr><td colspan="7" style="text-align:center;">No deposits found.</td></tr>';
+                return;
+            }
+
+            // Convert to Array
+            let deposits = [];
+            snap.forEach(c => {
+                deposits.push({ key: c.key, ...c.val() });
+            });
+
+            // Sort: Pending first, then by Date (Newest top)
+            deposits.sort((a, b) => {
+                if (a.status === 'pending' && b.status !== 'pending') return -1;
+                if (a.status !== 'pending' && b.status === 'pending') return 1;
+                return new Date(b.date) - new Date(a.date); 
+            });
+
+            // Render
+            deposits.forEach(d => {
+                let statusColor = '#888';
+                if(d.status === 'pending') statusColor = 'var(--warning)';
+                if(d.status === 'approved') statusColor = 'var(--success)';
+                if(d.status === 'rejected') statusColor = 'var(--danger)';
+
+                // Shorten User ID
+                const displayId = d.userId ? d.userId.substring(0, 6) + "..." : "Unknown";
+                
+                // Get Sender Number (Handle missing data)
+                const senderNum = d.numberSentFrom || "N/A";
+
+                tb.innerHTML += `
+                <tr>
+                    <td style="font-size:0.85rem; color:var(--text-secondary);">${displayId}</td>
+                    <td style="color:var(--accent); font-weight:bold;">${senderNum}</td>
+                    <td style="font-weight:bold; color:var(--text-primary);">৳${d.amount}</td>
+                    <td style="font-family:monospace; color:var(--info);">${d.trxId}</td>
+                    <td style="text-transform:uppercase; font-size:0.8rem;">${d.method}</td>
+                    <td style="color:${statusColor}; font-weight:bold; text-transform:uppercase;">${d.status}</td>
+                    <td>
+                        ${d.status === 'pending' ? `
+                        <div class="action-btn-group">
+                            <button class="btn btn-sm btn-green" onclick="approve('${d.key}', '${d.userId}', '${d.amount}')">Approve</button>
+                            <button class="btn btn-sm btn-red" onclick="reject('${d.key}')">Reject</button>
+                        </div>
+                        ` : '<span style="color:var(--text-secondary); font-size:0.8rem;">Completed</span>'}
+                    </td>
+                </tr>`;
+            });
+        });
+
+        function approve(key, uid, amount) {
+            if(confirm('Approve this deposit?')) {
+                const val = parseFloat(String(amount).replace(/[^0-9.]/g, ''));
+                
+                db.ref('deposits/' + key).update({ status: 'approved' });
+                
+                db.ref('users/' + uid + '/balance').transaction(current => (current || 0) + val);
+
+                db.ref('users/' + uid + '/rewards/' + Date.now()).set({
+                    amount: val,
+                    type: "Deposit Approved",
+                    date: new Date().toISOString()
+                });
+            }
+        }
+
+        function reject(key) {
+            if(confirm('Reject this deposit?')) {
+                db.ref('deposits/' + key).update({ status: 'rejected' });
+            }
+        }
+    </script>
+</body>
+</html>

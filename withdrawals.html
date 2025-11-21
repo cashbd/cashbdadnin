@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Withdrawals - CASHBD Admin</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+</head>
+<body>
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+        <h2>CASHBD Admin</h2>
+        <a href="dashboard.html" class="nav-link"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+        <a href="deposits.html" class="nav-link"><i class="fas fa-wallet"></i> Deposits</a>
+        <a href="withdrawals.html" class="nav-link active"><i class="fas fa-hand-holding-usd"></i> Withdrawals</a>
+        <a href="users.html" class="nav-link"><i class="fas fa-users"></i> Users</a>
+        <a href="settings.html" class="nav-link"><i class="fas fa-cogs"></i> Settings</a>
+        <a href="plans.html" class="nav-link"><i class="fas fa-rocket"></i> Plans</a>
+    </div>
+
+    <div class="main">
+        <div class="header">
+            <h1>Manage Withdrawals</h1>
+        </div>
+
+        <div class="stat-card" style="padding: 0; overflow: hidden;">
+            <div style="overflow-x: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>User ID</th>
+                            <th>Method</th>
+                            <th>Wallet Number</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="withdrawTable">
+                        <tr><td colspan="6" style="text-align:center; padding:20px;">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="firebase.js"></script>
+    <script src="admin.js"></script>
+    <script>
+        const tableBody = document.getElementById('withdrawTable');
+
+        // Fetch ALL Withdrawals
+        db.ref('withdrawals').on('value', snap => {
+            tableBody.innerHTML = '';
+            
+            if (!snap.exists()) {
+                tableBody.innerHTML = '<tr><td colspan="6" style="text-align:center;">No withdrawals found.</td></tr>';
+                return;
+            }
+
+            // Convert to Array
+            let list = [];
+            snap.forEach(c => {
+                list.push({ key: c.key, ...c.val() });
+            });
+
+            // Sort: Pending first, then by Date (Newest top)
+            list.sort((a, b) => {
+                if (a.status === 'pending' && b.status !== 'pending') return -1;
+                if (a.status !== 'pending' && b.status === 'pending') return 1;
+                return new Date(b.date) - new Date(a.date);
+            });
+
+            // Render Rows
+            list.forEach(w => {
+                let statusColor = '#888';
+                if(w.status === 'pending') statusColor = 'var(--accent)';
+                if(w.status === 'approved') statusColor = 'var(--green)';
+                if(w.status === 'rejected') statusColor = 'var(--red)';
+
+                // Shorten User ID
+                const displayId = w.userId ? w.userId.substring(0, 6) + "..." : "Unknown";
+
+                tableBody.innerHTML += `
+                <tr>
+                    <td style="font-size:0.85rem; color:#888;">${displayId}</td>
+                    <td style="text-transform:uppercase; color:var(--accent);">${w.method}</td>
+                    <td style="font-weight:bold; color:#fff;">${w.withdrawNumber}</td>
+                    <td style="color:var(--primary); font-weight:bold;">৳${w.amount}</td>
+                    <td style="color:${statusColor}; font-weight:bold; text-transform:uppercase;">${w.status}</td>
+                    <td>
+                        ${w.status === 'pending' ? `
+                        <button class="btn btn-green" onclick="approve('${w.key}', '${w.userId}', '${w.amount}')">Approve</button>
+                        <button class="btn btn-red" onclick="reject('${w.key}')">Reject</button>
+                        ` : '<span style="color:#555;">Completed</span>'}
+                    </td>
+                </tr>`;
+            });
+        });
+
+        function approve(key, uid, amount) {
+            if(!confirm(`Approve withdrawal of ৳${amount}? This will deduct balance.`)) return;
+            
+            // Clean the amount (remove symbols/commas)
+            const val = parseFloat(String(amount).replace(/[^0-9.]/g, ''));
+
+            // Transaction to safely deduct balance
+            db.ref('users/' + uid + '/balance').transaction(curr => {
+                if (curr === null) return 0; 
+                if (curr < val) return; // Abort transaction if balance is too low
+                return curr - val;
+            }, (error, committed, snapshot) => {
+                if (committed) {
+                    // If deduction successful, update status
+                    db.ref('withdrawals/' + key).update({ status: 'approved' });
+                    
+                    // Add History Log
+                    db.ref('users/' + uid + '/rewards/' + Date.now()).set({
+                        amount: -val,
+                        type: "Withdraw Approved",
+                        date: new Date().toISOString()
+                    });
+                } else {
+                    alert("Failed: User has insufficient balance!");
+                }
+            });
+        }
+
+        function reject(key) {
+            if(confirm('Reject this withdrawal?')) {
+                db.ref('withdrawals/' + key).update({ status: 'rejected' });
+            }
+        }
+    </script>
+</body>
+</html>

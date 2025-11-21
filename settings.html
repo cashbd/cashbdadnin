@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Settings - CASHBD Admin</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+</head>
+<body>
+    <div class="sidebar">
+        <h2>CASHBD Admin</h2>
+        <a href="dashboard.html" class="nav-link"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+        <a href="deposits.html" class="nav-link"><i class="fas fa-wallet"></i> Deposits</a>
+        <a href="withdrawals.html" class="nav-link"><i class="fas fa-hand-holding-usd"></i> Withdrawals</a>
+        <a href="users.html" class="nav-link"><i class="fas fa-users"></i> Users</a>
+        <a href="settings.html" class="nav-link active"><i class="fas fa-cogs"></i> Settings</a>
+        <a href="plans.html" class="nav-link"><i class="fas fa-rocket"></i> Plans</a>
+    </div>
+
+    <div class="main">
+        <div class="header"><h1>System Settings</h1></div>
+
+        <!-- NOTICE -->
+        <div class="stat-card">
+            <h3 style="color: var(--accent);">Marquee Notice</h3>
+            <input id="noticeTxt" type="text" placeholder="Enter notice text...">
+            <button class="btn btn-green" onclick="saveNotice()">Update Notice</button>
+        </div>
+
+        <!-- PAYMENT METHODS CONFIG -->
+        <div class="stat-card" style="margin-top:20px;">
+            <h3 style="color: var(--accent);">Payment Config (Deposit Numbers)</h3>
+            
+            <label>Bkash Number</label>
+            <input id="bkashNum" type="text" placeholder="01XXXXXXXXX">
+            
+            <label>Nagad Number</label>
+            <input id="nagadNum" type="text" placeholder="01XXXXXXXXX">
+
+            <label>Rocket Number</label>
+            <input id="rocketNum" type="text" placeholder="01XXXXXXXXX">
+
+            <label>Upay Number</label>
+            <input id="upayNum" type="text" placeholder="01XXXXXXXXX">
+
+            <label>Binance Wallet / Pay ID</label>
+            <input id="binanceNum" type="text" placeholder="TRC20 Address or Pay ID">
+            
+            <button class="btn btn-green" onclick="savePay()">Update All Numbers</button>
+        </div>
+        
+        <!-- MAINTENANCE -->
+        <div class="stat-card" style="margin-top:20px; border-color: var(--primary);">
+            <h3 style="color: var(--primary);">System Maintenance</h3>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn btn-red" onclick="toggleMaint(true)">Turn ON (Lock Site)</button>
+                <button class="btn btn-green" onclick="toggleMaint(false)">Turn OFF (Unlock)</button>
+            </div>
+            <p id="maintStatus" style="margin-top: 10px;">Status: Loading...</p>
+        </div>
+    </div>
+
+    <div id="toast">Saved!</div>
+
+    <script src="firebase.js"></script>
+    <script src="admin.js"></script>
+    <script>
+        const ref = db.ref('settings');
+
+        ref.on('value', snap => {
+            const s = snap.val() || {};
+            document.getElementById('noticeTxt').value = s.notice || "";
+            if(s.allowedMethods) {
+                if(s.allowedMethods.bkash) document.getElementById('bkashNum').value = s.allowedMethods.bkash.number || "";
+                if(s.allowedMethods.nagad) document.getElementById('nagadNum').value = s.allowedMethods.nagad.number || "";
+                if(s.allowedMethods.rocket) document.getElementById('rocketNum').value = s.allowedMethods.rocket.number || "";
+                if(s.allowedMethods.upay) document.getElementById('upayNum').value = s.allowedMethods.upay.number || "";
+                if(s.allowedMethods.binance) document.getElementById('binanceNum').value = s.allowedMethods.binance.number || "";
+            }
+            const statusText = document.getElementById('maintStatus');
+            statusText.innerHTML = s.maintenance ? "Status: <span style='color:red'>ON</span>" : "Status: <span style='color:var(--green)'>OFF</span>";
+        });
+
+        function saveNotice() {
+            ref.update({ notice: document.getElementById('noticeTxt').value }).then(() => showToast("Notice Updated"));
+        }
+
+        function savePay() {
+            const updates = {};
+            updates['allowedMethods/bkash/number'] = document.getElementById('bkashNum').value;
+            updates['allowedMethods/nagad/number'] = document.getElementById('nagadNum').value;
+            updates['allowedMethods/rocket/number'] = document.getElementById('rocketNum').value;
+            updates['allowedMethods/upay/number'] = document.getElementById('upayNum').value;
+            updates['allowedMethods/binance/number'] = document.getElementById('binanceNum').value;
+            ref.update(updates).then(() => showToast("Numbers Updated"));
+        }
+
+        function toggleMaint(val) {
+            ref.update({ maintenance: val }).then(() => showToast("Maintenance Updated"));
+        }
+
+        function showToast(msg) {
+            const x = document.getElementById("toast");
+            x.innerText = msg; x.className = "show";
+            setTimeout(() => x.className = x.className.replace("show", ""), 3000);
+        }
+    </script>
+</body>
+</html>

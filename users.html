@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Users - CASHBD Admin</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <style>
+        .action-btn-group {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .btn-sm {
+            padding: 5px 10px;
+            font-size: 0.8rem;
+            min-width: 60px;
+        }
+        /* Modal specific overrides */
+        .modal label { display: block; margin-top: 10px; color: var(--accent); }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h2>CASHBD Admin</h2>
+        <a href="dashboard.html" class="nav-link"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+        <a href="deposits.html" class="nav-link"><i class="fas fa-wallet"></i> Deposits</a>
+        <a href="withdrawals.html" class="nav-link"><i class="fas fa-hand-holding-usd"></i> Withdrawals</a>
+        <a href="users.html" class="nav-link active"><i class="fas fa-users"></i> Users</a>
+        <a href="settings.html" class="nav-link"><i class="fas fa-cogs"></i> Settings</a>
+        <a href="plans.html" class="nav-link"><i class="fas fa-rocket"></i> Plans</a>
+    </div>
+
+    <div class="main">
+        <div class="header">
+            <h1>Users Management</h1>
+            <div class="stat-val" id="userCount" style="font-size: 1.2rem;">0 Users</div>
+        </div>
+
+        <div class="stat-card" style="padding: 0; overflow: hidden;">
+            <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr>
+                            <th>User ID</th>
+                            <th>Name</th>
+                            <th>Phone</th>
+                            <th>Balance</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="uTable">
+                        <tr><td colspan="6" style="text-align:center; padding:20px;">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- EDIT USER MODAL -->
+    <div id="editUserModal" class="modal">
+        <div class="modal-content">
+            <h3 style="color: var(--primary); margin-bottom: 15px;">Edit User Details</h3>
+            
+            <input type="hidden" id="editUid">
+
+            <label>Full Name</label>
+            <input type="text" id="editName" placeholder="User Name">
+
+            <label>Phone Number</label>
+            <input type="text" id="editPhone" placeholder="Phone Number">
+
+            <label>Balance (BDT)</label>
+            <input type="number" id="editBal" placeholder="Balance">
+
+            <div style="margin-top: 20px; display: flex; justify-content: space-between;">
+                <button class="btn btn-red" onclick="closeEditModal()">Cancel</button>
+                <button class="btn btn-green" onclick="saveUserChanges()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="firebase.js"></script>
+    <script src="admin.js"></script>
+    <script>
+        // 1. LOAD USERS
+        db.ref('users').on('value', snap => {
+            const tb = document.getElementById('uTable');
+            const total = snap.exists() ? snap.numChildren() : 0;
+            document.getElementById('userCount').innerText = total + " Users";
+            
+            tb.innerHTML = ''; 
+            
+            if(!snap.exists()) {
+                tb.innerHTML = '<tr><td colspan="6" style="text-align:center;">No users found.</td></tr>';
+                return;
+            }
+
+            let userList = [];
+            snap.forEach(c => {
+                userList.push({ key: c.key, ...c.val() });
+            });
+
+            // Sort by ID (1, 2, 3...)
+            userList.sort((a, b) => (a.ownId || 0) - (b.ownId || 0));
+
+            userList.forEach(u => {
+                const dName = u.name || "No Name";
+                const dPhone = u.phone || "No Phone";
+                const dId = u.ownId ? "#" + u.ownId : "N/A";
+                const dBal = parseFloat(u.balance || 0).toFixed(2);
+                const isBanned = u.banned === true;
+
+                const statusHtml = isBanned 
+                    ? '<span style="color:var(--red); font-weight:bold;">BANNED</span>' 
+                    : '<span style="color:var(--green);">Active</span>';
+
+                const rowStyle = isBanned ? 'style="background:rgba(255, 77, 77, 0.1)"' : '';
+
+                tb.innerHTML += `
+                <tr ${rowStyle}>
+                    <td style="color:var(--accent); font-weight:bold;">${dId}</td>
+                    <td>${dName}</td>
+                    <td>${dPhone}</td>
+                    <td style="font-weight:bold; color:#fff;">৳${dBal}</td>
+                    <td>${statusHtml}</td>
+                    <td>
+                        <div class="action-btn-group">
+                            <button class="btn btn-sm ${isBanned ? 'btn-green' : 'btn-red'}" onclick="toggleBan('${u.key}', ${isBanned})">
+                                ${isBanned ? 'Unban' : 'Ban'}
+                            </button>
+                            
+                            <!-- EDIT BUTTON (Replaces old Bal button) -->
+                            <button class="btn btn-sm btn-blue" onclick="openEditModal('${u.key}', '${dName}', '${dPhone}', '${u.balance}')">
+                                <i class="fas fa-edit"></i> Edit
+                            </button>
+                        </div>
+                    </td>
+                </tr>`;
+            });
+        });
+
+        // 2. BAN / UNBAN
+        function toggleBan(uid, currentStatus) {
+            if(confirm(currentStatus ? "Unban User?" : "Ban User?")) {
+                db.ref('users/' + uid).update({ banned: !currentStatus });
+            }
+        }
+
+        // 3. MODAL LOGIC
+        function openEditModal(uid, name, phone, bal) {
+            document.getElementById('editUid').value = uid;
+            document.getElementById('editName').value = name;
+            document.getElementById('editPhone').value = phone;
+            document.getElementById('editBal').value = bal;
+            document.getElementById('editUserModal').style.display = 'flex';
+        }
+
+        function closeEditModal() {
+            document.getElementById('editUserModal').style.display = 'none';
+        }
+
+        function saveUserChanges() {
+            const uid = document.getElementById('editUid').value;
+            const name = document.getElementById('editName').value;
+            const phone = document.getElementById('editPhone').value;
+            const bal = document.getElementById('editBal').value;
+
+            if(!uid) return;
+
+            db.ref('users/' + uid).update({
+                name: name,
+                phone: phone,
+                balance: parseFloat(bal)
+            }).then(() => {
+                alert("User Updated Successfully!");
+                closeEditModal();
+            });
+        }
+    </script>
+</body>
+</html>

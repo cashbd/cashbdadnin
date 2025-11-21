@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Plans - CASHBD Admin</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+</head>
+<body>
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+        <h2>CASHBD Admin</h2>
+        <a href="dashboard.html" class="nav-link"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+        <a href="deposits.html" class="nav-link"><i class="fas fa-wallet"></i> Deposits</a>
+        <a href="withdrawals.html" class="nav-link"><i class="fas fa-hand-holding-usd"></i> Withdrawals</a>
+        <a href="users.html" class="nav-link"><i class="fas fa-users"></i> Users</a>
+        <a href="settings.html" class="nav-link"><i class="fas fa-cogs"></i> Settings</a>
+        <a href="plans.html" class="nav-link active"><i class="fas fa-rocket"></i> Plans</a>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div class="main">
+        <div class="header">
+            <h1>Investment Plans</h1>
+            <button class="btn btn-green" onclick="openAddModal()">+ Add New Plan</button>
+        </div>
+
+        <div id="plansGrid" class="stats-grid">
+            <p style="color:#888;">Loading plans...</p>
+        </div>
+    </div>
+
+    <!-- MODAL -->
+    <div id="planModal" class="modal">
+        <div class="modal-content">
+            <h3 id="modalTitle" style="color: var(--primary); margin-bottom: 20px;">Create New Plan</h3>
+            <input type="hidden" id="editKey">
+            
+            <label>Plan Title</label>
+            <input id="pTitle" type="text" placeholder="e.g. VIP Plan 1">
+
+            <label>Price (BDT)</label>
+            <input id="pPrice" type="number" placeholder="e.g. 1000">
+
+            <label>Daily Reward (BDT)</label>
+            <input id="pDaily" type="number" placeholder="e.g. 50">
+
+            <label>Validity (Days)</label>
+            <input id="pDays" type="number" placeholder="e.g. 30">
+
+            <div style="margin-top: 20px; display: flex; justify-content: space-between;">
+                <button class="btn btn-red" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-green" onclick="savePlan()">Save Plan</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="firebase.js"></script>
+    <script src="admin.js"></script>
+    <script>
+        db.ref('plans').on('value', snap => {
+            const div = document.getElementById('plansGrid');
+            div.innerHTML = '';
+            if (!snap.exists()) {
+                div.innerHTML = '<p style="color:#888;">No plans created yet.</p>';
+                return;
+            }
+
+            snap.forEach(c => {
+                const p = c.val();
+                const totalReturn = (parseFloat(p.dailyReward) * parseFloat(p.validityDays)).toFixed(0);
+                
+                div.innerHTML += `
+                <div class="stat-card" style="border-top: 4px solid var(--primary);">
+                    <h2 style="color: var(--accent); margin-bottom: 10px;">${p.title}</h2>
+                    
+                    <div style="display:flex; justify-content:space-between; margin-bottom:5px; border-bottom:1px solid #333; padding-bottom:5px;">
+                        <span style="color:#888;">Price:</span>
+                        <span style="font-weight:bold; font-size:1.1rem;">৳${p.price}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                        <span style="color:#888;">Daily:</span>
+                        <span style="color:var(--green);">৳${p.dailyReward}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                        <span style="color:#888;">Validity:</span>
+                        <span>${p.validityDays} Days</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-top:10px; background:#222; padding:5px; border-radius:4px;">
+                        <span style="color:#888; font-size:0.9rem;">Total Return:</span>
+                        <span style="color:var(--accent); font-weight:bold;">৳${totalReturn}</span>
+                    </div>
+
+                    <div style="margin-top:15px; display:flex; gap:10px;">
+                        <button class="btn btn-blue" style="width:50%;" 
+                            onclick="openEditModal('${c.key}', '${p.title}', ${p.price}, ${p.dailyReward}, ${p.validityDays})">
+                            Edit
+                        </button>
+                        <button class="btn btn-red" style="width:50%;" onclick="deletePlan('${c.key}')">
+                            Delete
+                        </button>
+                    </div>
+                </div>`;
+            });
+        });
+
+        function savePlan() {
+            const key = document.getElementById('editKey').value;
+            const title = document.getElementById('pTitle').value;
+            const price = document.getElementById('pPrice').value;
+            const daily = document.getElementById('pDaily').value;
+            const days = document.getElementById('pDays').value;
+
+            if(!title || !price || !daily || !days) return alert("Fill all fields");
+
+            const planData = {
+                title: title,
+                price: Number(price),
+                dailyReward: Number(daily),
+                validityDays: Number(days)
+            };
+
+            if (key) {
+                db.ref('plans/' + key).update(planData);
+            } else {
+                db.ref('plans').push(planData);
+            }
+            closeModal();
+        }
+
+        function deletePlan(key) {
+            if(confirm("Delete this plan?")) db.ref('plans/' + key).remove();
+        }
+
+        function openAddModal() {
+            document.getElementById('modalTitle').innerText = "Create New Plan";
+            document.getElementById('editKey').value = "";
+            document.getElementById('pTitle').value = "";
+            document.getElementById('pPrice').value = "";
+            document.getElementById('pDaily').value = "";
+            document.getElementById('pDays').value = "";
+            document.getElementById('planModal').style.display = 'flex';
+        }
+
+        function openEditModal(key, title, price, daily, days) {
+            document.getElementById('modalTitle').innerText = "Edit Plan";
+            document.getElementById('editKey').value = key;
+            document.getElementById('pTitle').value = title;
+            document.getElementById('pPrice').value = price;
+            document.getElementById('pDaily').value = daily;
+            document.getElementById('pDays').value = days;
+            document.getElementById('planModal').style.display = 'flex';
+        }
+
+        function closeModal() { document.getElementById('planModal').style.display = 'none'; }
+    </script>
+</body>
+</html>

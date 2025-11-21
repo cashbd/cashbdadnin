@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Login - CASHBD</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+</head>
+<body style="justify-content: center; align-items: center; min-height: 100vh; background: #000;">
+
+    <div class="stat-card" style="width: 350px; border: 1px solid #ff4500; box-shadow: 0 0 20px rgba(255, 69, 0, 0.2);">
+        <h2 style="text-align:center; color:#ff4500; margin-bottom: 20px;">Admin Panel</h2>
+        
+        <div style="margin-bottom: 15px;">
+            <label style="color: #888; font-size: 0.9em;">Username</label>
+            <input type="text" id="u" placeholder="Enter Username" style="margin-top: 5px;">
+        </div>
+
+        <div style="margin-bottom: 20px;">
+            <label style="color: #888; font-size: 0.9em;">Password</label>
+            <input type="password" id="p" placeholder="Enter Password" style="margin-top: 5px;">
+        </div>
+
+        <button class="btn btn-blue" style="width:100%; padding: 12px; font-size: 1rem; font-weight: bold;" onclick="doLogin()">LOGIN</button>
+        
+        <p id="msg" style="text-align:center; margin-top:15px; color: #ff4500; font-size: 0.9rem;"></p>
+
+        <!-- Default Creds Hint (Remove this block after deployment) -->
+        <div style="margin-top: 20px; padding: 10px; background: #111; border-radius: 5px; font-size: 0.8rem; color: #666; text-align: center; border: 1px dashed #333;">
+            <strong>Default Credentials:</strong><br>
+            User: <span style="color: #fff;">admin</span> | Pass: <span style="color: #fff;">123456</span>
+        </div>
+    </div>
+
+    <script src="firebase.js"></script>
+    <script>
+        // 1. AUTO-SETUP DEFAULT ADMIN (Runs on page load)
+        // If no admin exists in DB, this creates one: admin / 123456
+        window.onload = function() {
+            const adminRef = firebase.database().ref('settings/adminCreds');
+            adminRef.once('value', (snapshot) => {
+                if (!snapshot.exists()) {
+                    console.log("Initializing Default Admin...");
+                    adminRef.set({
+                        username: "admin",
+                        passwordHash: "123456"
+                    }).then(() => {
+                        console.log("Default Admin Created: admin / 123456");
+                    });
+                }
+            });
+        };
+
+        // 2. LOGIN FUNCTION
+        function doLogin() {
+            const u = document.getElementById('u').value.trim();
+            const p = document.getElementById('p').value.trim();
+            const msg = document.getElementById('msg');
+
+            msg.innerText = "Checking...";
+
+            firebase.database().ref('settings/adminCreds').once('value', snap => {
+                const creds = snap.val();
+                
+                if (creds && u === creds.username && p === creds.passwordHash) {
+                    // Success
+                    localStorage.setItem('adminUser', 'true');
+                    window.location.href = 'dashboard.html';
+                } else {
+                    // Fail
+                    msg.innerText = "Invalid Username or Password!";
+                    // Shake effect
+                    document.querySelector('.stat-card').animate([
+                        { transform: 'translateX(0)' },
+                        { transform: 'translateX(-10px)' },
+                        { transform: 'translateX(10px)' },
+                        { transform: 'translateX(0)' }
+                    ], { duration: 300 });
+                }
+            }).catch(error => {
+                msg.innerText = "Database Error: " + error.message;
+            });
+        }
+
+        // Allow pressing "Enter" to login
+        document.addEventListener('keydown', function(e) {
+            if(e.key === 'Enter') doLogin();
+        });
+    </script>
+</body>
+</html>
